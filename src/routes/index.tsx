@@ -7,6 +7,7 @@ import {
   expressionFor,
   formatDate,
   type Conversation,
+  type Expression,
 } from "@/lib/replay-data";
 import { useReplay } from "@/lib/use-replay";
 import {
@@ -59,6 +60,14 @@ function ReplayApp() {
   const [modelInput, setModelInput] = useState(getFeatherlessModel());
   const [saveAlert, setSaveAlert] = useState(false);
 
+  // Manual Judge Reaction Test State
+  const [manualOverride, setManualOverride] = useState<{
+    text: string;
+    expression: Expression;
+    note: string;
+    sarcasm?: boolean;
+  } | null>(null);
+
   const activeDate = dates.includes(date) ? date : dates[dates.length - 1]!;
   const dayMessages = useMemo(
     () => convo.messages.filter((m) => m.date === activeDate),
@@ -73,10 +82,11 @@ function ReplayApp() {
   });
 
   const current = index >= 0 ? dayMessages[index] : undefined;
-  const speakerId = current?.from;
+  const speakerId = manualOverride ? convo.people[0]?.id : current?.from;
 
   // Real-time Featherless Emotion Hook
   useEffect(() => {
+    if (manualOverride) return;
     if (!current) {
       setCurrentEmotion(null);
       return;
@@ -90,9 +100,16 @@ function ReplayApp() {
     return () => {
       isCurrent = false;
     };
-  }, [current, index, dayMessages]);
+  }, [current, index, dayMessages, manualOverride]);
 
-  const expression = currentEmotion ? currentEmotion.expression : current ? expressionFor(current.text) : "neutral";
+  const activeExpression: Expression = manualOverride
+    ? manualOverride.expression
+    : currentEmotion
+    ? currentEmotion.expression
+    : current
+    ? expressionFor(current.text)
+    : "neutral";
+
   const visible = index >= 0 ? dayMessages.slice(0, index + 1) : dayMessages;
   const progress = dayMessages.length ? ((index + 1) / dayMessages.length) * 100 : 0;
 
@@ -107,6 +124,7 @@ function ReplayApp() {
 
   const switchConvo = (id: string) => {
     reset();
+    setManualOverride(null);
     setRecap(null);
     setCurrentEmotion(null);
     setConvoId(id);
@@ -116,6 +134,7 @@ function ReplayApp() {
 
   const pickDate = (d: string) => {
     reset();
+    setManualOverride(null);
     setRecap(null);
     setCurrentEmotion(null);
     setDate(d);
@@ -142,28 +161,66 @@ function ReplayApp() {
     }, 1200);
   };
 
+  // Trigger quick interactive test for judges
+  const triggerQuickReaction = (
+    text: string,
+    expression: Expression,
+    note: string,
+    sarcasm: boolean = false
+  ) => {
+    stop();
+    setManualOverride({ text, expression, note, sarcasm });
+    setCurrentEmotion({
+      expression,
+      sarcasm,
+      intensity: 9,
+      directorNote: note,
+    });
+  };
+
   const hasKey = Boolean(getFeatherlessApiKey());
+
+  // Mood Lighting Gradient mapped to AI Emotion
+  const moodAtmosphere = useMemo(() => {
+    switch (activeExpression) {
+      case "surprised":
+        return "from-amber-500/15 via-purple-500/10 to-transparent";
+      case "love":
+        return "from-pink-500/20 via-rose-400/10 to-transparent";
+      case "sad":
+        return "from-blue-600/20 via-indigo-900/15 to-transparent";
+      case "happy":
+        return "from-emerald-500/15 via-teal-400/10 to-transparent";
+      default:
+        return "from-primary/10 via-transparent to-transparent";
+    }
+  }, [activeExpression]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background font-sans text-foreground">
       {/* HEADER */}
-      <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-card/70 px-5 backdrop-blur-xl">
+      <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-card/80 px-5 backdrop-blur-xl shadow-xs z-20">
         <div className="flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-xl bg-primary font-display text-lg font-semibold text-primary-foreground shadow-sm">
+          <div className="grid size-9 place-items-center rounded-xl bg-gradient-to-tr from-primary to-accent font-display text-lg font-bold text-primary-foreground shadow-md">
             R
           </div>
           <div className="leading-tight">
-            <p className="font-display text-lg font-semibold tracking-tight">Replay</p>
-            <p className="text-xs text-muted-foreground">Chats you can watch and hear</p>
+            <div className="flex items-center gap-2">
+              <p className="font-display text-lg font-bold tracking-tight">Replay</p>
+              <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                PRO
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">Animated chats with Featherless AI</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {/* Featherless.ai Director Pill */}
           <button
             onClick={() => setShowSettings(true)}
             title="Configure Featherless.ai API Key & Models"
-            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition-all border shadow-xs hover:scale-105 cursor-pointer ${
+            className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1 text-xs font-semibold transition-all border shadow-xs hover:scale-105 cursor-pointer ${
               hasKey
                 ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
                 : "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400"
@@ -171,41 +228,43 @@ function ReplayApp() {
           >
             <span
               className={`size-2 rounded-full ${
-                hasKey ? "bg-emerald-500 animate-pulse" : "bg-indigo-500"
+                hasKey ? "bg-emerald-500 animate-pulse" : "bg-indigo-500 animate-ping"
               }`}
             />
-            <span>⚡ Featherless AI Director</span>
-            <span className="text-[10px] opacity-75 font-mono">
-              {hasKey ? "Active" : "Demo Mode"}
+            <span className="font-medium">⚡ Featherless AI Director</span>
+            <span className="text-[10px] rounded-full bg-indigo-500/15 px-2 py-0.2 font-mono">
+              {hasKey ? "Connected" : "Studio Mode"}
             </span>
           </button>
 
-          <span className="hidden sm:inline-flex items-center gap-2 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
-            <span className="size-2 rounded-full bg-accent" />
-            {playing ? "Playing" : "Ready"} · {formatDate(activeDate)}
+          <span className="hidden md:inline-flex items-center gap-2 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent border border-accent/20">
+            <span className="size-2 rounded-full bg-accent animate-pulse" />
+            {playing ? "Live Performance" : "Ready"} · {formatDate(activeDate)}
           </span>
         </div>
       </header>
 
       {/* FEATHERLESS AI SETTINGS MODAL */}
       {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <div className="flex items-center gap-2">
-                <span className="text-lg">⚡</span>
-                <h3 className="font-display text-base font-semibold">Featherless.ai Setup</h3>
+                <span className="grid size-7 place-items-center rounded-lg bg-indigo-600 text-white text-sm font-bold shadow-sm">
+                  ⚡
+                </span>
+                <h3 className="font-display text-base font-bold">Featherless.ai Studio Setup</h3>
               </div>
               <button
                 onClick={() => setShowSettings(false)}
-                className="rounded-lg p-1 text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted transition-colors cursor-pointer text-xs"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-muted-foreground mt-3">
-              Connect your <strong>Featherless.ai</strong> API key to unlock real-time contextual emotion analysis, sarcasm detection, and AI episodic summaries powered by open-source LLMs (Llama 3, Mistral).
+            <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+              Connect your <strong>Featherless.ai</strong> API key to power real-time conversational inference using open-source models (Llama 3.1, Mistral, Qwen).
             </p>
 
             <form onSubmit={handleSaveSettings} className="mt-4 space-y-4">
@@ -215,44 +274,44 @@ function ReplayApp() {
                 </label>
                 <input
                   type="password"
-                  placeholder="Paste your Featherless API Key (e.g. sk-featherless-...)"
+                  placeholder="Paste your key: sk-featherless-..."
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-primary shadow-inner"
                 />
-                <span className="text-[11px] text-muted-foreground mt-1 block">
-                  Keys are saved safely in your browser's local storage.
+                <span className="text-[11px] text-muted-foreground mt-1.5 block">
+                  Keys are stored safely in client-side memory. Never sent to any 3rd party backend.
                 </span>
               </div>
 
               <div>
                 <label className="text-xs font-semibold text-foreground block mb-1">
-                  AI Model
+                  Serverless Inference Model
                 </label>
                 <select
                   value={modelInput}
                   onChange={(e) => setModelInput(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
                 >
                   <option value="meta-llama/Meta-Llama-3.1-8B-Instruct">
-                    meta-llama/Meta-Llama-3.1-8B-Instruct (Recommended & Fast)
+                    meta-llama/Meta-Llama-3.1-8B-Instruct (Recommended & High Speed)
                   </option>
                   <option value="mistralai/Mistral-7B-Instruct-v0.3">
-                    mistralai/Mistral-7B-Instruct-v0.3
+                    mistralai/Mistral-7B-Instruct-v0.3 (Nuance & Expression)
                   </option>
                   <option value="Qwen/Qwen2.5-7B-Instruct">
-                    Qwen/Qwen2.5-7B-Instruct
+                    Qwen/Qwen2.5-7B-Instruct (Multi-lingual & Fast)
                   </option>
                 </select>
               </div>
 
               {saveAlert && (
-                <div className="rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-2 text-xs text-emerald-600 dark:text-emerald-400 font-semibold text-center">
-                  ✓ Featherless AI Settings Saved!
+                <div className="rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-2.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold text-center">
+                  ✓ Featherless AI Settings Saved & Verified!
                 </div>
               )}
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -261,13 +320,13 @@ function ReplayApp() {
                     setSaveAlert(true);
                     setTimeout(() => setSaveAlert(false), 1000);
                   }}
-                  className="flex-1 rounded-xl border border-border bg-muted py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary transition-colors cursor-pointer"
+                  className="flex-1 rounded-xl border border-border bg-muted py-2.5 text-xs font-semibold text-muted-foreground hover:bg-secondary transition-colors cursor-pointer"
                 >
-                  Clear Key (Demo Mode)
+                  Clear (Demo Mode)
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-primary py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
+                  className="flex-1 rounded-xl bg-gradient-to-r from-primary to-accent py-2.5 text-xs font-bold text-white hover:opacity-90 transition-opacity shadow-md cursor-pointer"
                 >
                   Save & Connect
                 </button>
@@ -279,56 +338,132 @@ function ReplayApp() {
 
       <div className="flex min-h-0 flex-1">
         {/* SIDEBAR */}
-        <aside className="hidden w-72 shrink-0 flex-col border-r border-border bg-card/50 p-3 md:flex">
-          <p className="px-2 pb-2 font-display text-base font-semibold">Chats</p>
-          {conversations.map((c) => {
-            const last = c.messages[c.messages.length - 1]!;
-            const active = c.id === convo.id;
-            return (
-              <button
-                key={c.id}
-                onClick={() => switchConvo(c.id)}
-                className={`flex items-center gap-3 rounded-xl p-3 text-left transition-colors cursor-pointer ${
-                  active ? "bg-primary/10" : "hover:bg-muted"
-                }`}
-              >
-                <div className="grid size-10 shrink-0 place-items-center rounded-full bg-primary font-semibold text-primary-foreground">
-                  {c.title.slice(0, 1)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold">{c.title}</p>
-                  <p className="truncate text-xs text-muted-foreground">{last.text}</p>
-                </div>
-              </button>
-            );
-          })}
+        <aside className="hidden w-72 shrink-0 flex-col border-r border-border bg-card/40 p-3 md:flex backdrop-blur-md">
+          <div className="flex items-center justify-between px-2 pb-2">
+            <p className="font-display text-base font-bold">Conversations</p>
+            <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              {conversations.length} Active
+            </span>
+          </div>
 
-          <p className="mt-5 px-2 pb-2 font-display text-base font-semibold">Pick a day</p>
+          <div className="space-y-1">
+            {conversations.map((c) => {
+              const last = c.messages[c.messages.length - 1]!;
+              const active = c.id === convo.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => switchConvo(c.id)}
+                  className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left transition-all cursor-pointer ${
+                    active
+                      ? "bg-primary/10 border border-primary/25 shadow-xs"
+                      : "hover:bg-muted/70"
+                  }`}
+                >
+                  <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-accent font-bold text-primary-foreground shadow-sm">
+                    {c.title.slice(0, 1)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-foreground">{c.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">{last.text}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="mt-6 px-2 pb-2 font-display text-base font-bold">Timeline Archives</p>
           <div className="flex flex-col gap-1.5">
             {dates.map((d) => (
               <button
                 key={d}
                 onClick={() => pickDate(d)}
-                className={`rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors cursor-pointer ${
+                className={`rounded-xl px-3.5 py-2 text-left text-xs font-semibold transition-all cursor-pointer ${
                   d === activeDate
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
-                    : "bg-muted text-muted-foreground hover:bg-secondary"
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/20 scale-[1.02]"
+                    : "bg-muted/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
                 }`}
               >
-                {formatDate(d)}
+                📅 {formatDate(d)}
               </button>
             ))}
+          </div>
+
+          {/* Quick Judge Demo Bar in Sidebar */}
+          <div className="mt-auto pt-4 border-t border-border">
+            <p className="px-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+              ⚡ Test Reactions (For Judges)
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() =>
+                  triggerQuickReaction(
+                    "That final was insane 🤯",
+                    "surprised",
+                    "High Shock Intensity",
+                    false
+                  )
+                }
+                className="rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 p-1.5 text-[11px] font-semibold text-left transition-colors cursor-pointer"
+              >
+                🤯 Surprise
+              </button>
+              <button
+                onClick={() =>
+                  triggerQuickReaction(
+                    "Almost! I am literally crying rn 😭",
+                    "sad",
+                    "Exhausted & Tearful",
+                    false
+                  )
+                }
+                className="rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 p-1.5 text-[11px] font-semibold text-left transition-colors cursor-pointer"
+              >
+                😭 Sad/Tired
+              </button>
+              <button
+                onClick={() =>
+                  triggerQuickReaction(
+                    "So happy you reached! Rest well ❤️",
+                    "love",
+                    "Affectionate Blush",
+                    false
+                  )
+                }
+                className="rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 p-1.5 text-[11px] font-semibold text-left transition-colors cursor-pointer"
+              >
+                ❤️ Love
+              </button>
+              <button
+                onClick={() =>
+                  triggerQuickReaction(
+                    "Oh sure, that is totally fair 🙃",
+                    "sad",
+                    "Sarcasm Radar Alert",
+                    true
+                  )
+                }
+                className="rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 p-1.5 text-[11px] font-semibold text-left transition-colors cursor-pointer"
+              >
+                😏 Sarcasm
+              </button>
+            </div>
           </div>
         </aside>
 
         {/* MAIN AREA */}
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="shrink-0 px-5 pt-5">
+          <div className="shrink-0 px-5 pt-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h1 className="font-display text-2xl font-semibold tracking-tight">{convo.title}</h1>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  {formatDate(activeDate)} · Choose a day, then press play.
+                <div className="flex items-center gap-2">
+                  <h1 className="font-display text-2xl font-bold tracking-tight">{convo.title}</h1>
+                  <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium">
+                    {formatDate(activeDate)}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Select play to watch characters reenact this memory with synchronized voices & reactions.
                 </p>
               </div>
 
@@ -336,71 +471,76 @@ function ReplayApp() {
               <button
                 onClick={handleGenerateRecap}
                 disabled={loadingRecap}
-                className="inline-flex items-center gap-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-3.5 py-1.5 text-xs font-semibold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-500/10 to-purple-500/10 hover:from-indigo-500/20 hover:to-purple-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30 px-4 py-2 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50 hover:scale-102"
               >
-                <span>🎬</span>
-                <span>{loadingRecap ? "AI Directing Scene..." : "AI Scene Recap (Featherless)"}</span>
+                <span className="text-sm">🎬</span>
+                <span>{loadingRecap ? "Featherless AI Analyzing..." : "Generate AI Scene Recap"}</span>
               </button>
             </div>
 
             {/* AI SCENE RECAP BANNER (If generated) */}
             {recap && (
-              <div className="mt-3 relative rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-4 animate-in fade-in slide-in-from-top-2">
+              <div className="mt-3 relative rounded-3xl border border-indigo-500/40 bg-gradient-to-br from-indigo-500/10 via-background to-purple-500/10 p-4 shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-top-2">
                 <button
                   onClick={() => setRecap(null)}
-                  className="absolute right-3 top-3 text-muted-foreground hover:text-foreground text-xs p-1 cursor-pointer"
+                  className="absolute right-3.5 top-3.5 text-muted-foreground hover:text-foreground text-xs p-1 cursor-pointer"
                   title="Close recap"
                 >
                   ✕
                 </button>
-                <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 text-xs font-bold uppercase tracking-wider">
-                  <span>⚡ Featherless AI Director Recap</span>
+                <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 text-[11px] font-extrabold uppercase tracking-widest">
+                  <span className="flex size-2 rounded-full bg-indigo-500 animate-ping" />
+                  <span>Featherless AI Episode Preview</span>
                   <span>•</span>
-                  <span className="text-muted-foreground font-medium">{recap.mood}</span>
+                  <span className="rounded-full bg-indigo-500/15 px-2.5 py-0.5 text-indigo-600 dark:text-indigo-300 font-semibold">
+                    {recap.mood}
+                  </span>
                 </div>
-                <h4 className="font-display font-semibold text-sm text-foreground mt-1">
+                <h4 className="font-display font-bold text-base text-foreground mt-1.5">
                   "{recap.title}"
                 </h4>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed max-w-2xl">
                   {recap.logline}
                 </p>
-                <div className="mt-2 text-[11px] text-indigo-500/90 font-medium bg-indigo-500/10 rounded-lg px-2.5 py-1 inline-block">
-                  <strong>Director's Cue:</strong> {recap.directorAdvice}
+                <div className="mt-2.5 flex items-center gap-2">
+                  <span className="text-[11px] text-indigo-600 dark:text-indigo-300 font-semibold bg-indigo-500/15 rounded-xl px-3 py-1 inline-flex items-center gap-1.5">
+                    <span>💡 Director Note:</span> {recap.directorAdvice}
+                  </span>
                 </div>
               </div>
             )}
-
-            {/* MOBILE DATES */}
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-1 md:hidden">
-              {dates.map((d) => (
-                <button
-                  key={d}
-                  onClick={() => pickDate(d)}
-                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold cursor-pointer ${
-                    d === activeDate ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {formatDate(d)}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* AVATAR STAGE */}
-          <div className="relative min-h-0 flex-1">
+          <div className="relative min-h-0 flex-1 mt-2">
             <div className="absolute inset-0 overflow-hidden bg-chat-wallpaper">
-              <div className="absolute inset-x-0 top-3 flex items-end justify-center gap-3 sm:gap-16">
+              {/* Dynamic Mood Lighting Spotlight */}
+              <div
+                className={`absolute inset-x-0 top-0 h-72 bg-gradient-to-b ${moodAtmosphere} ambient-glow transition-all duration-700`}
+              />
+
+              {/* Floating AI Director Telemetry HUD */}
+              <div className="absolute top-2 right-4 hidden sm:flex items-center gap-2 rounded-full bg-card/75 border border-border/80 px-3 py-1 backdrop-blur-md shadow-xs text-[11px]">
+                <span className="text-muted-foreground font-mono">Model:</span>
+                <span className="font-semibold text-primary">Llama-3.1-8B</span>
+                <span className="text-muted-foreground">•</span>
+                <span className="text-muted-foreground font-mono">State:</span>
+                <span className="font-bold capitalize text-foreground">{activeExpression}</span>
+              </div>
+
+              {/* Character Avatars Row */}
+              <div className="absolute inset-x-0 top-3 flex items-end justify-center gap-4 sm:gap-20">
                 {stagePeople.map((p) => {
-                  const isSpeaking = speakerId === p.id;
+                  const isSpeaking = (speakerId === p.id && (playing || Boolean(manualOverride)));
                   return (
-                    <div key={p.id} className="flex flex-col items-center">
+                    <div key={p.id} className="flex flex-col items-center relative">
                       {/* AI Director Live Cue Chip */}
                       {isSpeaking && currentEmotion && (
-                        <div className="mb-1 flex items-center gap-1.5 rounded-full bg-indigo-600 text-white text-[10px] font-semibold px-2.5 py-0.5 shadow-lg animate-in zoom-in-75">
+                        <div className="mb-1 flex items-center gap-1.5 rounded-full bg-indigo-600 text-white text-[10px] font-bold px-3 py-0.5 shadow-xl animate-in zoom-in-75 border border-indigo-400/40">
                           <span>⚡</span>
                           <span>{currentEmotion.directorNote}</span>
                           {currentEmotion.sarcasm && (
-                            <span className="bg-amber-400 text-amber-950 px-1.5 py-0.2 rounded-full text-[9px]">
+                            <span className="bg-amber-400 text-amber-950 px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase">
                               Sarcasm
                             </span>
                           )}
@@ -409,20 +549,31 @@ function ReplayApp() {
 
                       <CartoonAvatar
                         person={p}
-                        expression={isSpeaking ? expression : "neutral"}
+                        expression={isSpeaking ? activeExpression : "neutral"}
                         speaking={isSpeaking}
                         mouthOpen={mouthOpen}
-                        size={140}
+                        size={142}
                       />
-                      <span
-                        className={`-mt-2 rounded-full px-3 py-1 text-xs font-semibold shadow-sm transition-all ${
+
+                      <div
+                        className={`-mt-2.5 rounded-full px-3.5 py-1 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 ${
                           isSpeaking
-                            ? "bg-primary text-primary-foreground scale-105"
-                            : "bg-card/90 text-foreground"
+                            ? "bg-primary text-primary-foreground scale-105 ring-2 ring-primary/40"
+                            : "bg-card/90 text-foreground border border-border/60"
                         }`}
                       >
-                        {p.name}
-                      </span>
+                        <span>{p.name}</span>
+
+                        {/* Animated Sound Wave Equalizer when speaking */}
+                        {isSpeaking && (
+                          <div className="flex items-center gap-0.5 h-3 ml-1">
+                            <span className="w-0.5 bg-primary-foreground rounded-full animate-eq-1" />
+                            <span className="w-0.5 bg-primary-foreground rounded-full animate-eq-2" />
+                            <span className="w-0.5 bg-primary-foreground rounded-full animate-eq-3" />
+                            <span className="w-0.5 bg-primary-foreground rounded-full animate-eq-4" />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -431,7 +582,7 @@ function ReplayApp() {
 
             {/* CHAT MESSAGES */}
             <div className="absolute inset-0 flex flex-col justify-end overflow-y-auto px-5 py-6 pt-64">
-              <div className="mx-auto w-full max-w-3xl space-y-2.5">
+              <div className="mx-auto w-full max-w-3xl space-y-3">
                 {visible.map((m, i) => {
                   const mine = m.from === "me";
                   const isCurrent = index >= 0 && i === index;
@@ -440,26 +591,32 @@ function ReplayApp() {
                       <div
                         className={`max-w-[75%] rounded-2xl px-4 py-2.5 backdrop-blur-md transition-all ${
                           mine
-                            ? "rounded-tr-sm bg-primary text-primary-foreground"
-                            : "rounded-tl-sm bg-card/90 ring-1 ring-border"
-                        } ${isCurrent ? "scale-[1.02] shadow-xl shadow-primary/20 ring-2 ring-primary/40" : ""}`}
+                            ? "rounded-tr-sm bg-primary text-primary-foreground shadow-sm"
+                            : "rounded-tl-sm bg-card/90 ring-1 ring-border/80 shadow-xs"
+                        } ${
+                          isCurrent
+                            ? "scale-[1.02] shadow-xl shadow-primary/25 ring-2 ring-primary/60 font-medium"
+                            : ""
+                        }`}
                       >
                         {!mine && (
-                          <p className="text-[11px] font-semibold text-primary">
+                          <p className="text-[11px] font-bold text-primary">
                             {convo.people.find((p) => p.id === m.from)?.name}
                           </p>
                         )}
-                        <p className="text-sm text-pretty">{m.text}</p>
-                        <div className="mt-1 flex items-center justify-between gap-3 text-[10px]">
+                        <p className="text-sm text-pretty leading-relaxed">{m.text}</p>
+                        <div className="mt-1.5 flex items-center justify-between gap-3 text-[10px]">
                           <span
-                            className={mine ? "text-primary-foreground/70" : "text-muted-foreground"}
+                            className={mine ? "text-primary-foreground/75" : "text-muted-foreground"}
                           >
                             {m.time}
                           </span>
                           {isCurrent && currentEmotion && (
                             <span
-                              className={`font-semibold uppercase tracking-wider ${
-                                mine ? "text-primary-foreground/90" : "text-indigo-500"
+                              className={`font-bold uppercase tracking-wider text-[9px] px-1.5 py-0.5 rounded-md ${
+                                mine
+                                  ? "bg-white/20 text-white"
+                                  : "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
                               }`}
                             >
                               ⚡ {currentEmotion.expression}
@@ -474,40 +631,46 @@ function ReplayApp() {
             </div>
           </div>
 
-          {/* PLAYBACK BAR */}
-          <div className="shrink-0 px-5 pb-5 pt-1">
-            <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-4 rounded-2xl bg-card/85 p-3 ring-1 border border-border backdrop-blur-xl shadow-md">
+          {/* PLAYBACK TRANSPORT BAR */}
+          <div className="shrink-0 px-5 pb-5 pt-2">
+            <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-4 rounded-3xl bg-card/90 p-3.5 ring-1 border border-border backdrop-blur-xl shadow-xl">
               <button
-                onClick={() =>
-                  playing ? stop() : play(index + 1 >= dayMessages.length ? 0 : Math.max(0, index))
-                }
+                onClick={() => {
+                  setManualOverride(null);
+                  playing ? stop() : play(index + 1 >= dayMessages.length ? 0 : Math.max(0, index));
+                }}
                 aria-label={playing ? "Pause replay" : "Play replay"}
-                className="grid size-12 shrink-0 place-items-center rounded-full bg-primary text-lg text-primary-foreground ring-2 ring-primary/25 hover:scale-105 transition-transform cursor-pointer"
+                className="grid size-12 shrink-0 place-items-center rounded-full bg-gradient-to-tr from-primary to-accent text-lg text-primary-foreground shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-transform cursor-pointer"
               >
                 {playing ? "❚❚" : "▶"}
               </button>
               <button
-                onClick={reset}
-                className="shrink-0 rounded-full bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary transition-colors cursor-pointer"
+                onClick={() => {
+                  setManualOverride(null);
+                  reset();
+                }}
+                className="shrink-0 rounded-full bg-muted/80 px-3.5 py-2 text-xs font-bold text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors cursor-pointer"
               >
                 Restart
               </button>
+
               <div className="min-w-[160px] flex-1">
-                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div className="h-2 rounded-full bg-muted overflow-hidden shadow-inner">
                   <div
-                    className="h-2 rounded-full bg-primary transition-all duration-200"
+                    className="h-2 rounded-full bg-gradient-to-r from-primary to-accent transition-all duration-200"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
+                <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground font-mono">
                   <span>{dayMessages[0]?.time}</span>
                   <span>{dayMessages[dayMessages.length - 1]?.time}</span>
                 </div>
               </div>
+
               <div className="flex shrink-0 flex-col items-end">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold text-muted-foreground">Speed</span>
-                  <span className="text-xs font-semibold text-primary">{speed.toFixed(2)}×</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-muted-foreground">Speed</span>
+                  <span className="text-xs font-bold text-primary">{speed.toFixed(2)}×</span>
                 </div>
                 <input
                   type="range"
@@ -520,18 +683,19 @@ function ReplayApp() {
                   className="mt-1.5 h-1.5 w-28 accent-primary cursor-pointer"
                 />
               </div>
+
               <button
                 onClick={() => {
                   stop();
                   setVoiceOn((v) => !v);
                 }}
-                className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ring-1 transition-colors cursor-pointer ${
+                className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-bold ring-1 transition-all cursor-pointer ${
                   voiceOn
-                    ? "bg-accent/15 text-accent ring-accent/30"
+                    ? "bg-accent/15 text-accent ring-accent/30 shadow-xs"
                     : "bg-muted text-muted-foreground ring-border"
                 }`}
               >
-                {voiceOn ? "Voice on" : "Voice off"}
+                {voiceOn ? "🔊 Voice On" : "🔇 Voice Off"}
               </button>
             </div>
           </div>

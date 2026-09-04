@@ -177,6 +177,26 @@
 .avatar-body-idle { animation: avatar-breathe 2.6s ease-in-out infinite; transform-origin: 80px 225px; }
 .avatar-arm-wave { animation: avatar-wave 0.7s ease-in-out infinite; transform-origin: 48px 145px; }
 
+@keyframes eq-bar {
+  0%, 100% { height: 4px; }
+  50% { height: 16px; }
+}
+
+.animate-eq-1 { animation: eq-bar 0.4s ease-in-out infinite; }
+.animate-eq-2 { animation: eq-bar 0.55s ease-in-out infinite 0.15s; }
+.animate-eq-3 { animation: eq-bar 0.35s ease-in-out infinite 0.08s; }
+.animate-eq-4 { animation: eq-bar 0.6s ease-in-out infinite 0.22s; }
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.04); }
+}
+
+.ambient-glow {
+  animation: pulse-subtle 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .avatar-body-active, .avatar-body-idle, .avatar-arm-wave { animation: none; }
+  .avatar-body-active, .avatar-body-idle, .avatar-arm-wave, .animate-eq-1, .animate-eq-2, .animate-eq-3, .animate-eq-4, .ambient-glow { animation: none; }
 }
