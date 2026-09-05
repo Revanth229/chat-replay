@@ -453,7 +453,87 @@ function ReplayApp() {
 
         {/* MAIN AREA */}
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="shrink-0 px-5 pt-4">
+          <div className="shrink-0 px-4 sm:px-5 pt-3 sm:pt-4">
+            {/* MOBILE ONLY: Conversation, Date & Quick Test Tabs */}
+            <div className="md:hidden space-y-2 mb-3">
+              {/* Chat Switcher */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                {conversations.map((c) => {
+                  const active = c.id === convo.id;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => switchConvo(c.id)}
+                      className={`shrink-0 flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                        active
+                          ? "bg-primary text-primary-foreground shadow-sm scale-102"
+                          : "bg-muted/80 text-muted-foreground hover:bg-secondary"
+                      }`}
+                    >
+                      <span>💬</span>
+                      <span>{c.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Date Switcher */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                {dates.map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => pickDate(d)}
+                    className={`shrink-0 rounded-xl px-2.5 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+                      d === activeDate
+                        ? "bg-primary/20 text-primary border border-primary/35 font-bold"
+                        : "bg-muted/60 text-muted-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    📅 {formatDate(d)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Mobile Quick Judge Test Bar */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5">
+                <span className="text-[10px] font-extrabold text-muted-foreground uppercase shrink-0">
+                  ⚡ AI Test:
+                </span>
+                <button
+                  onClick={() =>
+                    triggerQuickReaction("That final was insane 🤯", "surprised", "High Shock", false)
+                  }
+                  className="shrink-0 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 text-[10px] font-bold cursor-pointer"
+                >
+                  🤯 Surprise
+                </button>
+                <button
+                  onClick={() =>
+                    triggerQuickReaction("Almost! I am crying rn 😭", "sad", "Exhausted", false)
+                  }
+                  className="shrink-0 rounded-lg bg-blue-500/15 text-blue-600 dark:text-blue-400 px-2.5 py-1 text-[10px] font-bold cursor-pointer"
+                >
+                  😭 Sad
+                </button>
+                <button
+                  onClick={() =>
+                    triggerQuickReaction("Rest well ❤️", "love", "Affection", false)
+                  }
+                  className="shrink-0 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-400 px-2.5 py-1 text-[10px] font-bold cursor-pointer"
+                >
+                  ❤️ Love
+                </button>
+                <button
+                  onClick={() =>
+                    triggerQuickReaction("Oh sure, totally fair 🙃", "sad", "Sarcasm", true)
+                  }
+                  className="shrink-0 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2.5 py-1 text-[10px] font-bold cursor-pointer"
+                >
+                  😏 Sarcasm
+                </button>
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -632,8 +712,8 @@ function ReplayApp() {
           </div>
 
           {/* PLAYBACK TRANSPORT BAR */}
-          <div className="shrink-0 px-5 pb-5 pt-2">
-            <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-4 rounded-3xl bg-card/90 p-3.5 ring-1 border border-border backdrop-blur-xl shadow-xl">
+          <div className="shrink-0 px-3 sm:px-5 pb-4 sm:pb-5 pt-1 sm:pt-2">
+            <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between sm:justify-start gap-2 sm:gap-4 rounded-2xl sm:rounded-3xl bg-card/90 p-2.5 sm:p-3.5 ring-1 border border-border backdrop-blur-xl shadow-xl">
               <button
                 onClick={() => {
                   setManualOverride(null);
